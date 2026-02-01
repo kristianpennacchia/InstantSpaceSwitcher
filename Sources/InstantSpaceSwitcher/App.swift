@@ -1,4 +1,3 @@
-import SwiftUI
 import ISS
 import Carbon
 import Combine
@@ -6,13 +5,12 @@ import AppKit
 import ApplicationServices
 
 @main
-struct InstantSpaceSwitcherApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    var body: some Scene {
-        Settings {
-            EmptyView()
-        }
+class InstantSpaceSwitcherApp {
+    static func main() {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.run()
     }
 }
 
@@ -27,6 +25,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var cachedSpaceInfo: ISSSpaceInfo?
     private var cancellables = Set<AnyCancellable>()
     private var spaceChangeObserver: Any?
+    private var appActivationObserver: Any?
     private var refreshWorkItem: DispatchWorkItem?
     private lazy var baseStatusImage: NSImage? = {
         let image = NSImage(systemSymbolName: "arrow.left.and.right.square", accessibilityDescription: "InstantSpaceSwitcher")
@@ -46,12 +45,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         setupStatusItem()
         bindHotkeys()
         observeSpaceChanges()
+        observeAppActivation()
         refreshSpaceInfo()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         iss_destroy()
         stopObservingSpaceChanges()
+        stopObservingAppActivation()
     }
 
     private func ensureAccessibilityPermission() {
@@ -305,6 +306,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             spaceChangeObserver = nil
         }
     }
+    
+    private func observeAppActivation() {
+        stopObservingAppActivation()
+        appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.scheduleRefresh(after: 0.1)
+        }
+    }
+    
+    private func stopObservingAppActivation() {
+        if let observer = appActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            appActivationObserver = nil
+        }
+    }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         if menu === statusItem.menu || menu === spacesMenuItem?.submenu {
@@ -340,14 +356,47 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // TODO: extremely inefficient way of rendering the icon
     private func makeMenuBarIconImage(info: ISSSpaceInfo, size: NSSize) -> NSImage? {
-        let defaultDimension = NSStatusBar.system.thickness
-        let iconDimension = max(16, min(defaultDimension, min(size.width, size.height)))
-        let renderer = ImageRenderer(content: MenuBarIcon(info: info))
-        renderer.scale = NSScreen.main?.backingScaleFactor ?? 2.0
-
-        let rendered = renderer.nsImage ?? NSImage(systemSymbolName: "arrow.left.and.right.square", accessibilityDescription: "InstantSpaceSwitcher")
-        rendered?.isTemplate = true
-        return rendered
+        let iconSize: CGFloat = 18
+        let cornerRadius: CGFloat = 6
+        let displayText = String(Int(info.currentIndex) + 1)
+        
+        let image = NSImage(size: NSSize(width: iconSize, height: iconSize))
+        image.lockFocus()
+        
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            image.unlockFocus()
+            return nil
+        }
+        
+        context.beginTransparencyLayer(auxiliaryInfo: nil)
+        
+        let rect = NSRect(x: 0, y: 0, width: iconSize, height: iconSize)
+        let path = NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius)
+        NSColor.black.setFill()
+        path.fill()
+        
+        context.setBlendMode(.destinationOut)
+        
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: iconSize * 0.6, weight: .bold),
+            .foregroundColor: NSColor.white
+        ]
+        
+        let textSize = displayText.size(withAttributes: attributes)
+        let textRect = NSRect(
+            x: (iconSize - textSize.width) / 2,
+            y: (iconSize - textSize.height) / 2,
+            width: textSize.width,
+            height: textSize.height
+        )
+        
+        displayText.draw(in: textRect, withAttributes: attributes)
+        
+        context.endTransparencyLayer()
+        
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
     }
 }
 

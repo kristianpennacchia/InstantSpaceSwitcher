@@ -1,11 +1,10 @@
 import AppKit
-import SwiftUI
 
 @MainActor
 final class PreferencesWindowController {
     private lazy var window: NSWindow = {
         let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 260),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 300),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -16,7 +15,7 @@ final class PreferencesWindowController {
         window.level = .floating
         window.hidesOnDeactivate = false
         window.center()
-        window.contentView = NSHostingView(rootView: HotkeyPreferencesView())
+        window.contentView = HotkeyPreferencesView()
         window.standardWindowButton(.zoomButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         return window
