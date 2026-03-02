@@ -442,8 +442,10 @@ bool iss_switch_to_index(unsigned int targetIndex) {
     ISSDirection direction = info.currentIndex < targetIndex ? ISSDirectionRight : ISSDirectionLeft;
     unsigned int steps = direction == ISSDirectionRight ? (targetIndex - info.currentIndex) : (info.currentIndex - targetIndex);
 
-    // Post gestures directly without per-step bounds checking since we've validated target
     for (unsigned int i = 0; i < steps; i++) {
+        // For a currently unknown reason, we need to perform the extra
+        // processing in `iss_switch` compared to `iss_post_switch_gesture` else
+        // MacOS rings a bell sound.
         if (!iss_switch(direction)) {
             return false;
         }
