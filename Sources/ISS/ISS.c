@@ -431,30 +431,23 @@ bool iss_switch_to_index(unsigned int targetIndex) {
         return false;
     }
 
-    if (targetIndex >= info.spaceCount) {
+    bool outOfBounds = targetIndex >= info.spaceCount;
+    if (outOfBounds) {
         targetIndex = info.spaceCount - 1;
     }
 
     if (info.currentIndex == targetIndex) {
-        return true;
+        return !outOfBounds;
     }
 
     ISSDirection direction = info.currentIndex < targetIndex ? ISSDirectionRight : ISSDirectionLeft;
     unsigned int steps = direction == ISSDirectionRight ? (targetIndex - info.currentIndex) : (info.currentIndex - targetIndex);
 
     for (unsigned int i = 0; i < steps; i++) {
-        // For a currently unknown reason, we need to perform the extra
-        // processing in `iss_switch` compared to `iss_post_switch_gesture` else
-        // MacOS rings a bell sound.
-        if (!iss_switch(direction)) {
+        if (!iss_post_switch_gesture(direction)) {
             return false;
         }
     }
 
-    // Verify we reached the target
-    if (!iss_get_space_info(&info)) {
-        return false;
-    }
-
-    return info.currentIndex == targetIndex;
+    return !outOfBounds;
 }
