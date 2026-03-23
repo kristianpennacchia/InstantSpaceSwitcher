@@ -7,7 +7,7 @@ final class PreferencesWindowController: NSWindowController {
 
     let panel = PreferencesPanel(
       contentRect: NSRect(x: 0, y: 0, width: 550, height: 350),
-      styleMask: [.titled, .closable, .nonactivatingPanel],
+      styleMask: [.titled, .closable],
       backing: .buffered,
       defer: false
     )

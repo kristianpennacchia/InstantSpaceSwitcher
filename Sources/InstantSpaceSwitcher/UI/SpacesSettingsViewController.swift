@@ -2,6 +2,20 @@ import AppKit
 import ISS
 
 final class SpacesSettingsViewController: NSViewController {
+  private enum EditableFieldKind {
+    case symbol
+    case nickname
+
+    var columnIdentifier: NSUserInterfaceItemIdentifier {
+      switch self {
+      case .symbol:
+        return NSUserInterfaceItemIdentifier("symbol")
+      case .nickname:
+        return NSUserInterfaceItemIdentifier("nickname")
+      }
+    }
+  }
+
   private let nicknameStore = SpaceNicknameStore.shared
   private let symbolFieldTagOffset = 10_000
 
@@ -130,6 +144,8 @@ extension SpacesSettingsViewController: NSTableViewDelegate {
 
       let field = NSTextField(string: nicknameStore.symbolName(for: index) ?? "")
       field.placeholderString = "house.fill"
+      field.isEditable = true
+      field.isSelectable = true
       field.tag = symbolFieldTagOffset + index
       field.delegate = self
       field.target = self
@@ -158,6 +174,8 @@ extension SpacesSettingsViewController: NSTableViewDelegate {
       let cellView = NSTableCellView()
       let field = NSTextField(string: nicknameStore.nickname(for: index) ?? "")
       field.placeholderString = "Optional nickname"
+      field.isEditable = true
+      field.isSelectable = true
       field.tag = index
       field.delegate = self
       field.target = self
@@ -178,13 +196,73 @@ extension SpacesSettingsViewController: NSTableViewDelegate {
   }
 
   @objc private func commitNickname(_ sender: NSTextField) {
-    nicknameStore.setNickname(sender.stringValue, for: sender.tag)
-    reloadSpaces()
+    persistChanges(for: sender)
   }
 
   @objc private func commitSymbol(_ sender: NSTextField) {
-    nicknameStore.setSymbolName(sender.stringValue, for: sender.tag - symbolFieldTagOffset)
-    reloadSpaces()
+    persistChanges(for: sender)
+  }
+
+  private func persistChanges(for field: NSTextField) {
+    if field.tag >= symbolFieldTagOffset {
+      nicknameStore.setSymbolName(field.stringValue, for: field.tag - symbolFieldTagOffset)
+    } else {
+      nicknameStore.setNickname(field.stringValue, for: field.tag)
+    }
+  }
+
+  private func fieldContext(for field: NSTextField) -> (row: Int, kind: EditableFieldKind)? {
+    let index = field.tag >= symbolFieldTagOffset ? field.tag - symbolFieldTagOffset : field.tag
+    guard let row = spaceIndices.firstIndex(of: index) else { return nil }
+    let kind: EditableFieldKind = field.tag >= symbolFieldTagOffset ? .symbol : .nickname
+    return (row, kind)
+  }
+
+  private func focusEditableField(after field: NSTextField, movingBackward: Bool) {
+    guard let context = fieldContext(for: field) else { return }
+
+    let target: (row: Int, kind: EditableFieldKind)?
+    switch (context.kind, movingBackward) {
+    case (.symbol, false):
+      target = (context.row, .nickname)
+    case (.nickname, false):
+      target = context.row + 1 < spaceIndices.count ? (context.row + 1, .symbol) : nil
+    case (.nickname, true):
+      target = (context.row, .symbol)
+    case (.symbol, true):
+      target = context.row > 0 ? (context.row - 1, .nickname) : nil
+    }
+
+    guard let target else {
+      if movingBackward {
+        view.window?.selectPreviousKeyView(field)
+      } else {
+        view.window?.selectNextKeyView(field)
+      }
+      return
+    }
+
+    focusEditableField(atRow: target.row, kind: target.kind)
+  }
+
+  private func focusEditableField(atRow row: Int, kind: EditableFieldKind) {
+    guard row >= 0 && row < spaceIndices.count else { return }
+
+    let index = spaceIndices[row]
+    let tag = kind == .symbol ? symbolFieldTagOffset + index : index
+    let column = tableView.column(withIdentifier: kind.columnIdentifier)
+    guard column >= 0 else { return }
+
+    tableView.scrollRowToVisible(row)
+
+    guard
+      let cellView = tableView.view(atColumn: column, row: row, makeIfNecessary: true),
+      let field = cellView.viewWithTag(tag) as? NSTextField
+    else {
+      return
+    }
+
+    field.selectText(nil)
   }
 }
 
@@ -211,13 +289,26 @@ extension SpacesSettingsViewController: NSTextFieldDelegate {
 
   func controlTextDidEndEditing(_ obj: Notification) {
     guard let field = obj.object as? NSTextField else { return }
+    persistChanges(for: field)
+  }
 
-    if field.tag >= symbolFieldTagOffset {
-      nicknameStore.setSymbolName(field.stringValue, for: field.tag - symbolFieldTagOffset)
-    } else {
-      nicknameStore.setNickname(field.stringValue, for: field.tag)
+  func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector)
+    -> Bool
+  {
+    guard let field = control as? NSTextField else { return false }
+
+    if commandSelector == #selector(NSResponder.insertTab(_:)) {
+      persistChanges(for: field)
+      focusEditableField(after: field, movingBackward: false)
+      return true
     }
 
-    reloadSpaces()
+    if commandSelector == #selector(NSResponder.insertBacktab(_:)) {
+      persistChanges(for: field)
+      focusEditableField(after: field, movingBackward: true)
+      return true
+    }
+
+    return false
   }
 }

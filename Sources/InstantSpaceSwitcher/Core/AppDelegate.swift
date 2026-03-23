@@ -120,6 +120,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
     fileMenu.addItem(closeItem)
 
+    // Edit menu
+    let editMenuItem = NSMenuItem()
+    mainMenu.addItem(editMenuItem)
+
+    let editMenu = NSMenu(title: "Edit")
+    editMenuItem.submenu = editMenu
+
+    let undoItem = NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
+    undoItem.target = nil
+    editMenu.addItem(undoItem)
+
+    let redoItem = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "Z")
+    redoItem.keyEquivalentModifierMask = [.command, .shift]
+    redoItem.target = nil
+    editMenu.addItem(redoItem)
+
+    editMenu.addItem(NSMenuItem.separator())
+
+    let cutItem = NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+    cutItem.target = nil
+    editMenu.addItem(cutItem)
+
+    let copyItem = NSMenuItem(
+      title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+    copyItem.target = nil
+    editMenu.addItem(copyItem)
+
+    let pasteItem = NSMenuItem(
+      title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    pasteItem.target = nil
+    editMenu.addItem(pasteItem)
+
+    let deleteItem = NSMenuItem(
+      title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
+    deleteItem.target = nil
+    editMenu.addItem(deleteItem)
+
+    editMenu.addItem(NSMenuItem.separator())
+
+    let selectAllItem = NSMenuItem(
+      title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    selectAllItem.target = nil
+    editMenu.addItem(selectAllItem)
+
     NSApp.mainMenu = mainMenu
   }
 
