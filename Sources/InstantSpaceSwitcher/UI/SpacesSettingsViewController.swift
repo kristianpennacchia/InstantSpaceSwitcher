@@ -3,9 +3,12 @@ import ISS
 
 final class SpacesSettingsViewController: NSViewController {
   private let nicknameStore = SpaceNicknameStore.shared
+  private let symbolFieldTagOffset = 10_000
 
   private let helperLabel = NSTextField(
-    labelWithString: "Nicknames follow each space slot. Leave a field blank to show the number.")
+    labelWithString:
+      "Nicknames follow each space slot. Add an SF Symbol name like house.fill, and leave fields blank to fall back to the number."
+  )
   private let tableView = NSTableView()
   private let scrollView = NSScrollView()
 
@@ -38,14 +41,19 @@ final class SpacesSettingsViewController: NSViewController {
     spaceColumn.width = 120
     tableView.addTableColumn(spaceColumn)
 
+    let symbolColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("symbol"))
+    symbolColumn.title = "Symbol"
+    symbolColumn.width = 170
+    tableView.addTableColumn(symbolColumn)
+
     let nicknameColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("nickname"))
     nicknameColumn.title = "Nickname"
-    nicknameColumn.width = 320
+    nicknameColumn.width = 210
     tableView.addTableColumn(nicknameColumn)
 
     tableView.delegate = self
     tableView.dataSource = self
-    tableView.rowHeight = 30
+    tableView.rowHeight = 34
     tableView.usesAlternatingRowBackgroundColors = true
     tableView.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
 
@@ -112,6 +120,40 @@ extension SpacesSettingsViewController: NSTableViewDelegate {
       return cellView
     }
 
+    if tableColumn?.identifier.rawValue == "symbol" {
+      let cellView = NSTableCellView()
+      let imageView = NSImageView()
+      imageView.image = SpaceLabelFormatter.symbolImage(
+        for: index, pointSize: 14, weight: .regular, nicknameStore: nicknameStore)
+      imageView.contentTintColor = .secondaryLabelColor
+      imageView.translatesAutoresizingMaskIntoConstraints = false
+
+      let field = NSTextField(string: nicknameStore.symbolName(for: index) ?? "")
+      field.placeholderString = "house.fill"
+      field.tag = symbolFieldTagOffset + index
+      field.delegate = self
+      field.target = self
+      field.action = #selector(commitSymbol(_:))
+      field.translatesAutoresizingMaskIntoConstraints = false
+
+      let stackView = NSStackView(views: [imageView, field])
+      stackView.orientation = .horizontal
+      stackView.alignment = .centerY
+      stackView.spacing = 8
+      stackView.translatesAutoresizingMaskIntoConstraints = false
+      cellView.addSubview(stackView)
+
+      NSLayoutConstraint.activate([
+        imageView.widthAnchor.constraint(equalToConstant: 16),
+        imageView.heightAnchor.constraint(equalToConstant: 16),
+        stackView.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 4),
+        stackView.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -4),
+        stackView.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+      ])
+
+      return cellView
+    }
+
     if tableColumn?.identifier.rawValue == "nickname" {
       let cellView = NSTableCellView()
       let field = NSTextField(string: nicknameStore.nickname(for: index) ?? "")
@@ -139,17 +181,43 @@ extension SpacesSettingsViewController: NSTableViewDelegate {
     nicknameStore.setNickname(sender.stringValue, for: sender.tag)
     reloadSpaces()
   }
+
+  @objc private func commitSymbol(_ sender: NSTextField) {
+    nicknameStore.setSymbolName(sender.stringValue, for: sender.tag - symbolFieldTagOffset)
+    reloadSpaces()
+  }
 }
 
 extension SpacesSettingsViewController: NSTextFieldDelegate {
   func controlTextDidChange(_ obj: Notification) {
     guard let field = obj.object as? NSTextField else { return }
+
+    if field.tag >= symbolFieldTagOffset {
+      nicknameStore.setSymbolName(field.stringValue, for: field.tag - symbolFieldTagOffset)
+      if let stackView = field.superview as? NSStackView,
+        let preview = stackView.arrangedSubviews.first as? NSImageView
+      {
+        preview.image = SpaceLabelFormatter.symbolImage(
+          forSymbolName: field.stringValue,
+          pointSize: 14,
+          weight: .regular
+        )
+      }
+      return
+    }
+
     nicknameStore.setNickname(field.stringValue, for: field.tag)
   }
 
   func controlTextDidEndEditing(_ obj: Notification) {
     guard let field = obj.object as? NSTextField else { return }
-    nicknameStore.setNickname(field.stringValue, for: field.tag)
+
+    if field.tag >= symbolFieldTagOffset {
+      nicknameStore.setSymbolName(field.stringValue, for: field.tag - symbolFieldTagOffset)
+    } else {
+      nicknameStore.setNickname(field.stringValue, for: field.tag)
+    }
+
     reloadSpaces()
   }
 }

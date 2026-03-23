@@ -1,66 +1,121 @@
-import Foundation
+import AppKit
 import Combine
+
+struct SpaceNicknameEntry: Codable, Equatable {
+  var nickname: String?
+  var symbolName: String?
+
+  var normalized: SpaceNicknameEntry {
+    SpaceNicknameEntry(
+      nickname: nickname?.trimmedNil,
+      symbolName: symbolName?.trimmedNil
+    )
+  }
+
+  var isEmpty: Bool {
+    normalized.nickname == nil && normalized.symbolName == nil
+  }
+}
 
 final class SpaceNicknameStore: ObservableObject {
   static let shared = SpaceNicknameStore()
   private static let defaultsKey = "spaceNicknames"
 
-  @Published private(set) var nicknames: [Int: String]
+  @Published private(set) var entries: [Int: SpaceNicknameEntry]
 
   private let defaults: UserDefaults
 
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
-    nicknames = Self.loadNicknames(from: defaults, key: Self.defaultsKey)
+    entries = Self.loadEntries(from: defaults, key: Self.defaultsKey)
+  }
+
+  func entry(for index: Int) -> SpaceNicknameEntry? {
+    entries[index]
   }
 
   func nickname(for index: Int) -> String? {
-    nicknames[index]
+    entries[index]?.nickname
+  }
+
+  func symbolName(for index: Int) -> String? {
+    entries[index]?.symbolName
   }
 
   var highestStoredIndex: Int? {
-    nicknames.keys.max()
+    entries.keys.max()
   }
 
   func setNickname(_ nickname: String, for index: Int) {
-    let trimmed = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
-    var updated = nicknames
+    updateEntry(at: index) { entry in
+      entry.nickname = nickname
+    }
+  }
 
-    if trimmed.isEmpty {
+  func setSymbolName(_ symbolName: String, for index: Int) {
+    updateEntry(at: index) { entry in
+      entry.symbolName = symbolName
+    }
+  }
+
+  private func updateEntry(at index: Int, update: (inout SpaceNicknameEntry) -> Void) {
+    var entry = entries[index] ?? SpaceNicknameEntry()
+    update(&entry)
+    let normalized = entry.normalized
+    var updated = entries
+
+    if normalized.isEmpty {
       updated.removeValue(forKey: index)
     } else {
-      updated[index] = trimmed
+      updated[index] = normalized
     }
 
-    guard updated != nicknames else { return }
+    guard updated != entries else { return }
 
-    nicknames = updated
+    entries = updated
     persist()
   }
 
   private func persist() {
-    guard !nicknames.isEmpty else {
+    guard !entries.isEmpty else {
       defaults.removeObject(forKey: Self.defaultsKey)
       return
     }
 
-    if let data = try? JSONEncoder().encode(nicknames) {
+    if let data = try? JSONEncoder().encode(entries) {
       defaults.set(data, forKey: Self.defaultsKey)
     }
   }
 
-  private static func loadNicknames(from defaults: UserDefaults, key: String) -> [Int: String] {
-    guard let data = defaults.data(forKey: key),
-      let decoded = try? JSONDecoder().decode([Int: String].self, from: data)
-    else {
+  private static func loadEntries(from defaults: UserDefaults, key: String) -> [Int: SpaceNicknameEntry] {
+    guard let data = defaults.data(forKey: key) else {
       return [:]
     }
 
-    return decoded.reduce(into: [:]) { result, entry in
-      let trimmed = entry.value.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !trimmed.isEmpty else { return }
-      result[entry.key] = trimmed
+    if let decoded = try? JSONDecoder().decode([Int: SpaceNicknameEntry].self, from: data) {
+      return decoded.reduce(into: [:]) { result, entry in
+        let normalized = entry.value.normalized
+        guard !normalized.isEmpty else { return }
+        result[entry.key] = normalized
+      }
     }
+
+    if let legacyNicknames = try? JSONDecoder().decode([Int: String].self, from: data) {
+      return legacyNicknames.reduce(into: [:]) { result, entry in
+        let normalized = SpaceNicknameEntry(nickname: entry.value, symbolName: nil).normalized
+        guard !normalized.isEmpty else { return }
+        result[entry.key] = normalized
+      }
+    }
+
+    return [:]
+  }
+}
+
+private extension String {
+  var trimmedNil: String? {
+    let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 }
 
@@ -99,6 +154,37 @@ enum SpaceLabelFormatter {
     }
 
     return "Switch to \(nickname) (Space \(index + 1))"
+  }
+
+  static func symbolImage(
+    for index: Int,
+    pointSize: CGFloat = 14,
+    weight: NSFont.Weight = .regular,
+    nicknameStore: SpaceNicknameStore = .shared
+  ) -> NSImage? {
+    symbolImage(
+      forSymbolName: nicknameStore.symbolName(for: index),
+      pointSize: pointSize,
+      weight: weight
+    )
+  }
+
+  static func symbolImage(
+    forSymbolName symbolName: String?,
+    pointSize: CGFloat = 14,
+    weight: NSFont.Weight = .regular
+  ) -> NSImage? {
+    guard let symbolName = symbolName?.trimmedNil,
+      let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+    else {
+      return nil
+    }
+
+    let configured =
+      symbol.withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize, weight: weight))
+      ?? symbol
+    configured.isTemplate = true
+    return configured
   }
 }
 

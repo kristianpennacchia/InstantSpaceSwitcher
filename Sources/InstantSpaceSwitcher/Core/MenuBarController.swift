@@ -153,6 +153,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
       let item = NSMenuItem(title: title, action: #selector(switchToSpace(_:)), keyEquivalent: "")
       item.tag = index
       item.target = self
+      item.image = SpaceLabelFormatter.symbolImage(
+        for: index, pointSize: 13, weight: .regular, nicknameStore: nicknameStore)
       item.state = index == Int(info.currentIndex) ? .on : .off
       submenu.addItem(item)
     }
@@ -175,10 +177,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     button.font = nil
     if let info = cachedSpaceInfo {
-      button.image = nil
+      button.image = SpaceLabelFormatter.symbolImage(
+        for: Int(info.currentIndex),
+        pointSize: NSFont.systemFontSize,
+        weight: .medium,
+        nicknameStore: nicknameStore)
       button.title = SpaceLabelFormatter.menuBarTitle(
         for: Int(info.currentIndex), nicknameStore: nicknameStore)
-      button.imagePosition = .noImage
+      button.imagePosition = button.image == nil ? .noImage : .imageLeft
       return
     }
 
@@ -189,7 +195,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
   }
 
   private func bindNicknameStore() {
-    nicknameStore.$nicknames.receive(on: RunLoop.main).sink { [weak self] _ in
+    nicknameStore.$entries.receive(on: RunLoop.main).sink { [weak self] _ in
       self?.updateMenuState()
     }.store(in: &cancellables)
   }

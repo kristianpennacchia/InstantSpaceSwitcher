@@ -241,7 +241,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if hasInfo {
       OSDWindow.shared.show(
         message: SpaceLabelFormatter.runtimeLabel(
-          for: Int(targetIndex), nicknameStore: nicknameStore))
+          for: Int(targetIndex), nicknameStore: nicknameStore),
+        symbolName: nicknameStore.symbolName(for: Int(targetIndex)))
     }
   }
 
@@ -256,7 +257,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Show OSD for the target slot.
     OSDWindow.shared.show(
-      message: SpaceLabelFormatter.runtimeLabel(for: Int(index), nicknameStore: nicknameStore))
+      message: SpaceLabelFormatter.runtimeLabel(for: Int(index), nicknameStore: nicknameStore),
+      symbolName: nicknameStore.symbolName(for: Int(index)))
   }
 
   private func refreshSpaceInfo() {

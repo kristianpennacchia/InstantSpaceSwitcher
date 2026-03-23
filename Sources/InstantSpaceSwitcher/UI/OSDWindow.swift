@@ -5,12 +5,14 @@ final class OSDWindow {
 
   private var window: NSWindow?
   private var label: NSTextField?
+  private var symbolView: NSImageView?
+  private var contentStack: NSStackView?
   private var visualEffect: NSVisualEffectView?
   private var hideTimer: Timer?
 
   private init() {}
 
-  func show(message: String) {
+  func show(message: String, symbolName: String? = nil) {
     guard UserDefaults.standard.bool(forKey: "showOSD") else { return }
 
     hideTimer?.invalidate()
@@ -20,10 +22,16 @@ final class OSDWindow {
       createWindow()
     }
 
-    guard let window = window, let label = label else { return }
+    guard let window = window, let label = label, let symbolView = symbolView else { return }
 
     label.stringValue = message
     label.font = font(for: message)
+    symbolView.image = SpaceLabelFormatter.symbolImage(
+      forSymbolName: symbolName,
+      pointSize: message.count <= 2 ? 26 : 20,
+      weight: .semibold
+    )
+    symbolView.isHidden = symbolView.image == nil
     resizeWindow(for: message)
 
     // Position on cursor's screen
@@ -85,21 +93,38 @@ final class OSDWindow {
     label.isEditable = false
     label.cell?.lineBreakMode = .byTruncatingTail
 
-    visualEffect.addSubview(label)
+    let symbolView = NSImageView()
+    symbolView.contentTintColor = .labelColor
+    symbolView.imageScaling = .scaleProportionallyUpOrDown
+    symbolView.translatesAutoresizingMaskIntoConstraints = false
+    symbolView.isHidden = true
+
+    let contentStack = NSStackView(views: [symbolView, label])
+    contentStack.orientation = .horizontal
+    contentStack.alignment = .centerY
+    contentStack.spacing = 12
+    contentStack.translatesAutoresizingMaskIntoConstraints = false
+
+    visualEffect.addSubview(contentStack)
     window.contentView = visualEffect
 
     NSLayoutConstraint.activate([
-      label.leadingAnchor.constraint(greaterThanOrEqualTo: visualEffect.leadingAnchor, constant: 24),
-      label.trailingAnchor.constraint(
+      symbolView.widthAnchor.constraint(equalToConstant: 24),
+      symbolView.heightAnchor.constraint(equalToConstant: 24),
+      contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: visualEffect.leadingAnchor, constant: 24),
+      contentStack.trailingAnchor.constraint(
         lessThanOrEqualTo: visualEffect.trailingAnchor, constant: -24),
-      label.topAnchor.constraint(greaterThanOrEqualTo: visualEffect.topAnchor, constant: 20),
-      label.bottomAnchor.constraint(lessThanOrEqualTo: visualEffect.bottomAnchor, constant: -20),
-      label.centerXAnchor.constraint(equalTo: visualEffect.centerXAnchor),
-      label.centerYAnchor.constraint(equalTo: visualEffect.centerYAnchor),
+      contentStack.topAnchor.constraint(greaterThanOrEqualTo: visualEffect.topAnchor, constant: 20),
+      contentStack.bottomAnchor.constraint(
+        lessThanOrEqualTo: visualEffect.bottomAnchor, constant: -20),
+      contentStack.centerXAnchor.constraint(equalTo: visualEffect.centerXAnchor),
+      contentStack.centerYAnchor.constraint(equalTo: visualEffect.centerYAnchor),
     ])
 
     self.window = window
     self.label = label
+    self.symbolView = symbolView
+    self.contentStack = contentStack
     self.visualEffect = visualEffect
   }
 
@@ -111,16 +136,16 @@ final class OSDWindow {
   }
 
   private func resizeWindow(for message: String) {
-    guard let window else { return }
+    guard let window, let contentStack else { return }
 
     let minimumSize: NSSize = message.count <= 2
       ? NSSize(width: 140, height: 140)
       : NSSize(width: 180, height: 100)
-    let attributes: [NSAttributedString.Key: Any] = [.font: font(for: message)]
-    let textSize = (message as NSString).size(withAttributes: attributes)
+    contentStack.layoutSubtreeIfNeeded()
+    let stackSize = contentStack.fittingSize
     let contentSize = NSSize(
-      width: max(minimumSize.width, ceil(textSize.width) + 48),
-      height: max(minimumSize.height, ceil(textSize.height) + 40)
+      width: max(minimumSize.width, ceil(stackSize.width) + 48),
+      height: max(minimumSize.height, ceil(stackSize.height) + 40)
     )
 
     window.setContentSize(contentSize)

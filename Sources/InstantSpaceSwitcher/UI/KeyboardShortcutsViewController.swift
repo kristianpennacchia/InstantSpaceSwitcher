@@ -119,7 +119,7 @@ final class KeyboardShortcutsViewController: NSViewController {
       .store(in: &cancellables)
     store.$space10Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
       .store(in: &cancellables)
-    nicknameStore.$nicknames.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts()
+    nicknameStore.$entries.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts()
     }.store(in: &cancellables)
   }
 
@@ -169,14 +169,39 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
       let cellView = NSTableCellView()
       let textField = NSTextField(labelWithString: shortcut.name)
       textField.translatesAutoresizingMaskIntoConstraints = false
-      cellView.addSubview(textField)
-      cellView.textField = textField
+      if let index = shortcut.identifier.spaceTargetIndex,
+        let symbolImage = SpaceLabelFormatter.symbolImage(
+          for: index, pointSize: 13, weight: .regular, nicknameStore: nicknameStore)
+      {
+        let imageView = NSImageView(image: symbolImage)
+        imageView.contentTintColor = .secondaryLabelColor
+        imageView.translatesAutoresizingMaskIntoConstraints = false
 
-      NSLayoutConstraint.activate([
-        textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 4),
-        textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -4),
-        textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
-      ])
+        let stackView = NSStackView(views: [imageView, textField])
+        stackView.orientation = .horizontal
+        stackView.alignment = .centerY
+        stackView.spacing = 6
+        stackView.translatesAutoresizingMaskIntoConstraints = false
+        cellView.addSubview(stackView)
+        cellView.textField = textField
+
+        NSLayoutConstraint.activate([
+          imageView.widthAnchor.constraint(equalToConstant: 14),
+          imageView.heightAnchor.constraint(equalToConstant: 14),
+          stackView.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 4),
+          stackView.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -4),
+          stackView.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+        ])
+      } else {
+        cellView.addSubview(textField)
+        cellView.textField = textField
+
+        NSLayoutConstraint.activate([
+          textField.leadingAnchor.constraint(equalTo: cellView.leadingAnchor, constant: 4),
+          textField.trailingAnchor.constraint(equalTo: cellView.trailingAnchor, constant: -4),
+          textField.centerYAnchor.constraint(equalTo: cellView.centerYAnchor),
+        ])
+      }
 
       return cellView
     } else if tableColumn?.identifier.rawValue == "shortcut" {
