@@ -15,7 +15,7 @@ final class OSDWindow {
   private init() {}
 
   func show(message: String, symbolName: String? = nil) {
-    guard UserDefaults.standard.bool(forKey: "showOSD") else { return }
+    guard UserDefaults.standard.bool(forKey: PreferenceKey.showOSD) else { return }
 
     hideTimer?.invalidate()
     hideTimer = nil
@@ -56,7 +56,7 @@ final class OSDWindow {
     window.alphaValue = 1.0
     window.orderFrontRegardless()
 
-    let durationMs = UserDefaults.standard.object(forKey: "osdDurationMs") as? Int ?? 500
+    let durationMs = UserDefaults.standard.object(forKey: PreferenceKey.osdDurationMs) as? Int ?? 500
     let duration = Double(durationMs) / 1000.0
     hideTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
       self?.hide()

@@ -5,6 +5,11 @@ import ISS
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  private enum DirectSpaceSwitchSource {
+    case hotkey
+    case menu
+  }
+
   private let menuBarController = MenuBarController()
   private let hotkeyStore = HotkeyStore.shared
   private let nicknameStore = SpaceNicknameStore.shared
@@ -12,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var cancellables = Set<AnyCancellable>()
   private var spaceChangeObserver: Any?
   private var appActivationObserver: Any?
+  private var currentSpaceIndex: UInt32?
+  private var previousSpaceIndex: UInt32?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     ensureAccessibilityPermission()
@@ -190,25 +197,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case .right:
         self.performSpaceSwitch(ISSDirectionRight)
       case .space1:
-        self.performSpaceSwitchToIndex(0)
+        self.performSpaceSwitchToIndex(0, source: .hotkey)
       case .space2:
-        self.performSpaceSwitchToIndex(1)
+        self.performSpaceSwitchToIndex(1, source: .hotkey)
       case .space3:
-        self.performSpaceSwitchToIndex(2)
+        self.performSpaceSwitchToIndex(2, source: .hotkey)
       case .space4:
-        self.performSpaceSwitchToIndex(3)
+        self.performSpaceSwitchToIndex(3, source: .hotkey)
       case .space5:
-        self.performSpaceSwitchToIndex(4)
+        self.performSpaceSwitchToIndex(4, source: .hotkey)
       case .space6:
-        self.performSpaceSwitchToIndex(5)
+        self.performSpaceSwitchToIndex(5, source: .hotkey)
       case .space7:
-        self.performSpaceSwitchToIndex(6)
+        self.performSpaceSwitchToIndex(6, source: .hotkey)
       case .space8:
-        self.performSpaceSwitchToIndex(7)
+        self.performSpaceSwitchToIndex(7, source: .hotkey)
       case .space9:
-        self.performSpaceSwitchToIndex(8)
+        self.performSpaceSwitchToIndex(8, source: .hotkey)
       case .space10:
-        self.performSpaceSwitchToIndex(9)
+        self.performSpaceSwitchToIndex(9, source: .hotkey)
       }
     }
   }
@@ -221,6 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Calculate target before attempting switch
     var targetIndex: UInt32 = 0
     if hasInfo {
+      updateTrackedSpaceIndices(withCurrentIndex: info.currentIndex)
       if direction == ISSDirectionLeft {
         targetIndex = info.currentIndex > 0 ? info.currentIndex - 1 : info.currentIndex
       } else {
@@ -235,6 +243,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // Update menubar space info only on successful switch
+    if hasInfo {
+      updateTrackedSpaceIndices(withCurrentIndex: targetIndex)
+    }
     refreshSpaceInfo()
 
     // Show OSD for the target slot only on successful switch.
@@ -246,28 +257,75 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  private func performSpaceSwitchToIndex(_ index: UInt32) {
-    if !iss_switch_to_index(index) {
+  private func performSpaceSwitchToIndex(_ requestedIndex: UInt32, source: DirectSpaceSwitchSource) {
+    let currentIndex = currentSpaceIndexFromSystem()
+    if let currentIndex {
+      updateTrackedSpaceIndices(withCurrentIndex: currentIndex)
+    }
+    let targetIndex = resolvedTargetIndex(
+      requestedIndex: requestedIndex,
+      currentIndex: currentIndex,
+      source: source
+    )
+
+    if !iss_switch_to_index(targetIndex) {
       NSSound.beep()
       return
     }
 
     // Update menubar space info
+    updateTrackedSpaceIndices(withCurrentIndex: targetIndex)
     refreshSpaceInfo()
 
     // Show OSD for the target slot.
     OSDWindow.shared.show(
-      message: SpaceLabelFormatter.runtimeLabel(for: Int(index), nicknameStore: nicknameStore),
-      symbolName: nicknameStore.symbolName(for: Int(index)))
+      message: SpaceLabelFormatter.runtimeLabel(for: Int(targetIndex), nicknameStore: nicknameStore),
+      symbolName: nicknameStore.symbolName(for: Int(targetIndex)))
   }
 
   private func refreshSpaceInfo() {
     var info = ISSSpaceInfo()
     if iss_get_menubar_space_info(&info) {
+      updateTrackedSpaceIndices(withCurrentIndex: info.currentIndex)
       menuBarController.updateWithSpaceInfo(info)
     } else {
+      if let currentIndex = currentSpaceIndexFromSystem() {
+        updateTrackedSpaceIndices(withCurrentIndex: currentIndex)
+      }
       menuBarController.updateWithSpaceInfo(nil)
     }
+  }
+
+  private func currentSpaceIndexFromSystem() -> UInt32? {
+    var info = ISSSpaceInfo()
+    guard iss_get_space_info(&info) else { return nil }
+    return info.currentIndex
+  }
+
+  private func resolvedTargetIndex(
+    requestedIndex: UInt32,
+    currentIndex: UInt32?,
+    source: DirectSpaceSwitchSource
+  ) -> UInt32 {
+    guard
+      source == .hotkey,
+      UserDefaults.standard.object(
+        forKey: PreferenceKey.repeatDirectSpaceHotkeyReturnsToPreviousSpace
+      ) as? Bool ?? false,
+      currentIndex == requestedIndex,
+      let previousSpaceIndex,
+      previousSpaceIndex != requestedIndex
+    else {
+      return requestedIndex
+    }
+
+    return previousSpaceIndex
+  }
+
+  private func updateTrackedSpaceIndices(withCurrentIndex newCurrentIndex: UInt32) {
+    guard currentSpaceIndex != newCurrentIndex else { return }
+    previousSpaceIndex = currentSpaceIndex
+    currentSpaceIndex = newCurrentIndex
   }
 
   private func observeSpaceChanges() {
@@ -325,7 +383,7 @@ extension AppDelegate: MenuBarControllerDelegate {
   func menuBarController(
     _ controller: MenuBarController, didRequestSwitchToSpaceAtIndex index: UInt32
   ) {
-    performSpaceSwitchToIndex(index)
+    performSpaceSwitchToIndex(index, source: .menu)
     controller.scheduleRefresh(after: 0.25)
   }
 

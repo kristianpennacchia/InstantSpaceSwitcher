@@ -4,6 +4,12 @@ import ServiceManagement
 final class GeneralSettingsViewController: NSViewController {
   private let showOSDCheckbox = NSButton(
     checkboxWithTitle: "Show on-screen display when switching spaces", target: nil, action: nil)
+  private let repeatDirectSpaceHotkeyCheckbox = NSButton(
+    checkboxWithTitle:
+      "Pressing the current space's direct shortcut returns to the previous space",
+    target: nil,
+    action: nil
+  )
   private let osdDurationPopup = NSPopUpButton()
   private let osdDurationLabel = NSTextField(labelWithString: "Duration:")
   private let launchAtLoginCheckbox = NSButton(
@@ -36,6 +42,8 @@ final class GeneralSettingsViewController: NSViewController {
 
     showOSDCheckbox.target = self
     showOSDCheckbox.action = #selector(showOSDChanged)
+    repeatDirectSpaceHotkeyCheckbox.target = self
+    repeatDirectSpaceHotkeyCheckbox.action = #selector(repeatDirectSpaceHotkeyChanged)
 
     for duration in durationPresets {
       osdDurationPopup.addItem(withTitle: "\(duration)ms")
@@ -54,6 +62,7 @@ final class GeneralSettingsViewController: NSViewController {
 
     stackView.addArrangedSubview(generalLabel)
     stackView.addArrangedSubview(showOSDCheckbox)
+    stackView.addArrangedSubview(repeatDirectSpaceHotkeyCheckbox)
     stackView.addArrangedSubview(osdDurationContainer)
     stackView.addArrangedSubview(launchAtLoginCheckbox)
 
@@ -67,10 +76,14 @@ final class GeneralSettingsViewController: NSViewController {
   }
 
   private func loadSettings() {
-    let showOSD = defaults.bool(forKey: "showOSD")
+    let showOSD = defaults.bool(forKey: PreferenceKey.showOSD)
     showOSDCheckbox.state = showOSD ? .on : .off
+    let repeatDirectSpaceHotkey =
+      defaults.object(forKey: PreferenceKey.repeatDirectSpaceHotkeyReturnsToPreviousSpace) as? Bool
+      ?? false
+    repeatDirectSpaceHotkeyCheckbox.state = repeatDirectSpaceHotkey ? .on : .off
 
-    let durationMs = defaults.object(forKey: "osdDurationMs") as? Int ?? 200
+    let durationMs = defaults.object(forKey: PreferenceKey.osdDurationMs) as? Int ?? 200
     if let index = durationPresets.firstIndex(of: durationMs) {
       osdDurationPopup.selectItem(at: index)
     } else {
@@ -84,15 +97,22 @@ final class GeneralSettingsViewController: NSViewController {
 
   @objc private func showOSDChanged(_ sender: NSButton) {
     let isEnabled = sender.state == .on
-    defaults.set(isEnabled, forKey: "showOSD")
+    defaults.set(isEnabled, forKey: PreferenceKey.showOSD)
     osdDurationPopup.isEnabled = isEnabled
+  }
+
+  @objc private func repeatDirectSpaceHotkeyChanged(_ sender: NSButton) {
+    defaults.set(
+      sender.state == .on,
+      forKey: PreferenceKey.repeatDirectSpaceHotkeyReturnsToPreviousSpace
+    )
   }
 
   @objc private func osdDurationChanged(_ sender: NSPopUpButton) {
     let index = sender.indexOfSelectedItem
     guard index >= 0 && index < durationPresets.count else { return }
     let duration = durationPresets[index]
-    defaults.set(duration, forKey: "osdDurationMs")
+    defaults.set(duration, forKey: PreferenceKey.osdDurationMs)
   }
 
   @objc private func launchAtLoginChanged(_ sender: NSButton) {
