@@ -6,6 +6,8 @@ final class OSDWindow {
   private var window: NSWindow?
   private var label: NSTextField?
   private var symbolView: NSImageView?
+  private var symbolWidthConstraint: NSLayoutConstraint?
+  private var symbolHeightConstraint: NSLayoutConstraint?
   private var contentStack: NSStackView?
   private var visualEffect: NSVisualEffectView?
   private var hideTimer: Timer?
@@ -24,11 +26,16 @@ final class OSDWindow {
 
     guard let window = window, let label = label, let symbolView = symbolView else { return }
 
+    let labelFont = font(for: message)
     label.stringValue = message
-    label.font = font(for: message)
+    label.font = labelFont
+
+    let symbolDimension = symbolDimension(for: labelFont)
+    symbolWidthConstraint?.constant = symbolDimension
+    symbolHeightConstraint?.constant = symbolDimension
     symbolView.image = SpaceLabelFormatter.symbolImage(
       forSymbolName: symbolName,
-      pointSize: message.count <= 2 ? 26 : 20,
+      pointSize: symbolDimension,
       weight: .semibold
     )
     symbolView.isHidden = symbolView.image == nil
@@ -108,9 +115,12 @@ final class OSDWindow {
     visualEffect.addSubview(contentStack)
     window.contentView = visualEffect
 
+    let symbolWidthConstraint = symbolView.widthAnchor.constraint(equalToConstant: 30)
+    let symbolHeightConstraint = symbolView.heightAnchor.constraint(equalToConstant: 30)
+
     NSLayoutConstraint.activate([
-      symbolView.widthAnchor.constraint(equalToConstant: 24),
-      symbolView.heightAnchor.constraint(equalToConstant: 24),
+      symbolWidthConstraint,
+      symbolHeightConstraint,
       contentStack.leadingAnchor.constraint(greaterThanOrEqualTo: visualEffect.leadingAnchor, constant: 24),
       contentStack.trailingAnchor.constraint(
         lessThanOrEqualTo: visualEffect.trailingAnchor, constant: -24),
@@ -124,6 +134,8 @@ final class OSDWindow {
     self.window = window
     self.label = label
     self.symbolView = symbolView
+    self.symbolWidthConstraint = symbolWidthConstraint
+    self.symbolHeightConstraint = symbolHeightConstraint
     self.contentStack = contentStack
     self.visualEffect = visualEffect
   }
@@ -161,5 +173,9 @@ final class OSDWindow {
     default:
       return NSFont.systemFont(ofSize: 22, weight: .semibold)
     }
+  }
+
+  private func symbolDimension(for font: NSFont) -> CGFloat {
+    max(28, ceil(font.pointSize * 1.1))
   }
 }
