@@ -303,16 +303,9 @@ extension HotkeyIdentifier {
     switch self {
     case .left: return "Switch Left"
     case .right: return "Switch Right"
-    case .space1: return "Space 1"
-    case .space2: return "Space 2"
-    case .space3: return "Space 3"
-    case .space4: return "Space 4"
-    case .space5: return "Space 5"
-    case .space6: return "Space 6"
-    case .space7: return "Space 7"
-    case .space8: return "Space 8"
-    case .space9: return "Space 9"
-    case .space10: return "Space 10"
+    default:
+      guard let index = spaceTargetIndex else { return rawValue }
+      return SpaceLabelFormatter.submenuTitle(for: index)
     }
   }
 

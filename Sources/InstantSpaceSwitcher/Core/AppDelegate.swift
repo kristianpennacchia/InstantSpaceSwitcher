@@ -7,6 +7,7 @@ import ISS
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private let menuBarController = MenuBarController()
   private let hotkeyStore = HotkeyStore.shared
+  private let nicknameStore = SpaceNicknameStore.shared
   private lazy var preferencesWindowController = PreferencesWindowController()
   private var cancellables = Set<AnyCancellable>()
   private var spaceChangeObserver: Any?
@@ -236,9 +237,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Update menubar space info only on successful switch
     refreshSpaceInfo()
 
-    // Show OSD with target space number only on successful switch
+    // Show OSD for the target slot only on successful switch.
     if hasInfo {
-      OSDWindow.shared.show(message: "\(targetIndex + 1)")
+      OSDWindow.shared.show(
+        message: SpaceLabelFormatter.runtimeLabel(
+          for: Int(targetIndex), nicknameStore: nicknameStore))
     }
   }
 
@@ -251,8 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Update menubar space info
     refreshSpaceInfo()
 
-    // Show OSD with target space number only
-    OSDWindow.shared.show(message: "\(index + 1)")
+    // Show OSD for the target slot.
+    OSDWindow.shared.show(
+      message: SpaceLabelFormatter.runtimeLabel(for: Int(index), nicknameStore: nicknameStore))
   }
 
   private func refreshSpaceInfo() {
@@ -319,9 +323,7 @@ extension AppDelegate: MenuBarControllerDelegate {
   func menuBarController(
     _ controller: MenuBarController, didRequestSwitchToSpaceAtIndex index: UInt32
   ) {
-    if !iss_switch_to_index(index) {
-      NSSound.beep()
-    }
+    performSpaceSwitchToIndex(index)
     controller.scheduleRefresh(after: 0.25)
   }
 

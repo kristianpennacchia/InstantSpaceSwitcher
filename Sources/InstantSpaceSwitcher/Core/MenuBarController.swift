@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ISS
 
 @MainActor
@@ -9,6 +10,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
   private var spacesMenuItem: NSMenuItem?
   private var cachedSpaceInfo: ISSSpaceInfo?
   private var refreshWorkItem: DispatchWorkItem?
+  private var cancellables = Set<AnyCancellable>()
+  private let nicknameStore = SpaceNicknameStore.shared
 
   private lazy var baseStatusImage: NSImage? = {
     let image = NSImage(
@@ -22,6 +25,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
   func setup() {
     statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     statusItem.menu = createMenu()
+    bindNicknameStore()
     updateStatusItemAppearance()
   }
 
@@ -145,7 +149,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     let count = Int(info.spaceCount)
     for index in 0..<count {
-      let title = "Space \(index + 1)"
+      let title = SpaceLabelFormatter.submenuTitle(for: index, nicknameStore: nicknameStore)
       let item = NSMenuItem(title: title, action: #selector(switchToSpace(_:)), keyEquivalent: "")
       item.tag = index
       item.target = self
@@ -170,19 +174,24 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     guard let button = statusItem.button else { return }
 
     button.font = nil
-    button.title = ""
-    button.imagePosition = .imageOnly
-
-    let icon: NSImage?
     if let info = cachedSpaceInfo {
-      icon = MenuBarIconRenderer.renderIcon(for: info)
-    } else {
-      icon = nil
+      button.image = nil
+      button.title = SpaceLabelFormatter.menuBarTitle(
+        for: Int(info.currentIndex), nicknameStore: nicknameStore)
+      button.imagePosition = .noImage
+      return
     }
 
-    let finalIcon = icon ?? baseStatusImage
-    finalIcon?.isTemplate = true
-    button.image = finalIcon
+    button.title = ""
+    button.imagePosition = .imageOnly
+    baseStatusImage?.isTemplate = true
+    button.image = baseStatusImage
+  }
+
+  private func bindNicknameStore() {
+    nicknameStore.$nicknames.receive(on: RunLoop.main).sink { [weak self] _ in
+      self?.updateMenuState()
+    }.store(in: &cancellables)
   }
 
   func applyHotkey(_ combination: HotkeyCombination, to identifier: HotkeyIdentifier) {
