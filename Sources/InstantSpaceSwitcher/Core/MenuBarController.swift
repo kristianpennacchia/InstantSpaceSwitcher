@@ -177,14 +177,19 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     button.font = nil
     if let info = cachedSpaceInfo {
+      let title = SpaceLabelFormatter.menuBarTitle(
+        for: Int(info.currentIndex), nicknameStore: nicknameStore)
       button.image = SpaceLabelFormatter.symbolImage(
         for: Int(info.currentIndex),
         pointSize: NSFont.systemFontSize,
         weight: .medium,
         nicknameStore: nicknameStore)
-      button.title = SpaceLabelFormatter.menuBarTitle(
-        for: Int(info.currentIndex), nicknameStore: nicknameStore)
-      button.imagePosition = button.image == nil ? .noImage : .imageLeft
+      button.title = title
+      if button.image == nil {
+        button.imagePosition = .noImage
+      } else {
+        button.imagePosition = title.isEmpty ? .imageOnly : .imageLeft
+      }
       return
     }
 

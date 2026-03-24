@@ -131,7 +131,15 @@ enum SpaceLabelFormatter {
   static func runtimeLabel(
     for index: Int, nicknameStore: SpaceNicknameStore = .shared
   ) -> String {
-    nicknameStore.nickname(for: index) ?? number(for: index)
+    if let nickname = nicknameStore.nickname(for: index) {
+      return nickname
+    }
+
+    if symbolImage(for: index, nicknameStore: nicknameStore) != nil {
+      return ""
+    }
+
+    return number(for: index)
   }
 
   static func menuBarTitle(

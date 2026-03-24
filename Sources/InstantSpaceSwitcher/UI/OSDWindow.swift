@@ -29,6 +29,7 @@ final class OSDWindow {
     let labelFont = font(for: message)
     label.stringValue = message
     label.font = labelFont
+    label.isHidden = message.isEmpty
 
     let symbolDimension = symbolDimension(for: labelFont)
     symbolWidthConstraint?.constant = symbolDimension
@@ -39,6 +40,7 @@ final class OSDWindow {
       weight: .semibold
     )
     symbolView.isHidden = symbolView.image == nil
+    contentStack?.spacing = label.isHidden || symbolView.isHidden ? 0 : 12
     resizeWindow(for: message)
 
     // Position on cursor's screen
