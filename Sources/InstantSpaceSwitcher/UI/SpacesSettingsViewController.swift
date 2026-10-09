@@ -18,6 +18,8 @@ final class SpacesSettingsViewController: NSViewController {
 
   private let nicknameStore = SpaceNicknameStore.shared
   private let symbolFieldTagOffset = 10_000
+  // Always offer a row for every space that has a direct shortcut.
+  private let minimumSpaceRows = HotkeyIdentifier.allCases.compactMap(\.spaceTargetIndex).count
 
   private let helperLabel = NSTextField(
     labelWithString:
@@ -95,7 +97,7 @@ final class SpacesSettingsViewController: NSViewController {
   private func reloadSpaces() {
     let detectedCount = detectedSpaceCount()
     let highestStored = nicknameStore.highestStoredIndex.map { $0 + 1 } ?? 0
-    let count = max(10, detectedCount, highestStored)
+    let count = max(minimumSpaceRows, detectedCount, highestStored)
 
     spaceIndices = Array(0..<count)
     tableView.reloadData()

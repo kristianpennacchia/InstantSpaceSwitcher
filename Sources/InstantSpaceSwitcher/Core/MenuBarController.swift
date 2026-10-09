@@ -160,8 +160,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
       let title = SpaceLabelFormatter.submenuTitle(for: index, nicknameStore: nicknameStore)
       let item = NSMenuItem(title: title, action: #selector(switchToSpace(_:)), keyEquivalent: "")
       
-      // Sync customized shortcuts
-      if let identifier = identifierForSpace(index + 1) {
+      // Sync customized shortcuts, only advertising ones that are enabled
+      if let identifier = identifierForSpace(index + 1), store.isEnabled(identifier) {
         let comb = store.combination(for: identifier)
         item.keyEquivalent = comb.keyEquivalent
         item.keyEquivalentModifierMask = comb.cocoaModifierFlags
