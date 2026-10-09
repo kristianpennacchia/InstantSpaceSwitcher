@@ -1,4 +1,5 @@
 import AppKit
+import ISS
 import ServiceManagement
 
 final class GeneralSettingsViewController: NSViewController {
@@ -12,15 +13,27 @@ final class GeneralSettingsViewController: NSViewController {
   )
   private let osdDurationPopup = NSPopUpButton()
   private let osdDurationLabel = NSTextField(labelWithString: "Duration:")
+  private let overlayDetectionCheckbox = NSButton(
+    checkboxWithTitle: "Enable Mission Control/Exposé detection (experimental)", target: nil, action: nil)
+  private let showOSDInMissionControlCheckbox = NSButton(
+    checkboxWithTitle: "Show on-screen display in Mission Control", target: nil, action: nil)
+  private let swipeOverrideCheckbox = NSButton(
+    checkboxWithTitle: "Override swipe gesture", target: nil, action: nil)
+  private let animationSpeedPopup = NSPopUpButton()
+  private let animationSpeedLabel = NSTextField(labelWithString: "Animation Speed:")
   private let launchAtLoginCheckbox = NSButton(
     checkboxWithTitle: "Launch at login", target: nil, action: nil)
+  private let hideMenuBarIconCheckbox = NSButton(
+    checkboxWithTitle: "Hide menu bar icon", target: nil, action: nil)
 
   private let durationPresets = [100, 200, 300, 500, 750, 1000]
+  private let animationSpeedOptions = ["Normal", "Fast", "Faster", "Fastest", "Instant"]
+  private let animationSpeedValues: [Double] = [40.0, 50.0, 60.0, 80.0, 2000.0]
 
   private let defaults = UserDefaults.standard
 
   override func loadView() {
-    view = NSView(frame: NSRect(x: 0, y: 0, width: 500, height: 300))
+    self.view = FormView()
   }
 
   override func viewDidLoad() {
@@ -31,48 +44,79 @@ final class GeneralSettingsViewController: NSViewController {
   }
 
   private func setupUI() {
-    let stackView = NSStackView()
-    stackView.orientation = .vertical
-    stackView.alignment = .leading
-    stackView.spacing = 16
-    stackView.translatesAutoresizingMaskIntoConstraints = false
+    guard let formView = view as? FormView else { return }
 
-    let generalLabel = NSTextField(labelWithString: "General Settings")
-    generalLabel.font = NSFont.boldSystemFont(ofSize: 13)
+    if formView.hasRows { return }
 
+    // Targets/Actions
     showOSDCheckbox.target = self
     showOSDCheckbox.action = #selector(showOSDChanged)
     repeatDirectSpaceHotkeyCheckbox.target = self
     repeatDirectSpaceHotkeyCheckbox.action = #selector(repeatDirectSpaceHotkeyChanged)
-
-    for duration in durationPresets {
-      osdDurationPopup.addItem(withTitle: "\(duration)ms")
-    }
     osdDurationPopup.target = self
     osdDurationPopup.action = #selector(osdDurationChanged)
-
-    let osdDurationContainer = NSStackView()
-    osdDurationContainer.orientation = .horizontal
-    osdDurationContainer.spacing = 8
-    osdDurationContainer.addArrangedSubview(osdDurationLabel)
-    osdDurationContainer.addArrangedSubview(osdDurationPopup)
-
+    overlayDetectionCheckbox.target = self
+    overlayDetectionCheckbox.action = #selector(overlayDetectionChanged)
+    showOSDInMissionControlCheckbox.target = self
+    showOSDInMissionControlCheckbox.action = #selector(showOSDInMissionControlChanged)
+    swipeOverrideCheckbox.target = self
+    swipeOverrideCheckbox.action = #selector(swipeOverrideChanged)
+    animationSpeedPopup.target = self
+    animationSpeedPopup.action = #selector(animationSpeedChanged)
     launchAtLoginCheckbox.target = self
     launchAtLoginCheckbox.action = #selector(launchAtLoginChanged)
+    hideMenuBarIconCheckbox.target = self
+    hideMenuBarIconCheckbox.action = #selector(hideMenuBarIconChanged)
 
-    stackView.addArrangedSubview(generalLabel)
-    stackView.addArrangedSubview(showOSDCheckbox)
-    stackView.addArrangedSubview(repeatDirectSpaceHotkeyCheckbox)
-    stackView.addArrangedSubview(osdDurationContainer)
-    stackView.addArrangedSubview(launchAtLoginCheckbox)
+    // Populate data
+    for duration in durationPresets { osdDurationPopup.addItem(withTitle: "\(duration)ms") }
+    for speed in animationSpeedOptions { animationSpeedPopup.addItem(withTitle: speed) }
 
-    view.addSubview(stackView)
+    // System
+    let systemLabel = NSTextField(labelWithString: "System:")
+    formView.addRow(label: systemLabel, control: launchAtLoginCheckbox)
+    formView.addRow(label: nil, control: hideMenuBarIconCheckbox)
+    formView.addRow(label: nil, control: swipeOverrideCheckbox)
 
-    NSLayoutConstraint.activate([
-      stackView.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
-      stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-      stackView.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -20),
-    ])
+    let experimentalTitle = NSMutableAttributedString(string: "Enable Mission Control/Exposé detection\n")
+    let sublabel = NSAttributedString(
+      string: "Experimental—may be flaky",
+      attributes: [
+        .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+        .foregroundColor: NSColor.secondaryLabelColor
+      ])
+    experimentalTitle.append(sublabel)
+    overlayDetectionCheckbox.attributedTitle = experimentalTitle
+    
+    formView.addRow(label: nil, control: overlayDetectionCheckbox)
+    formView.addSectionSpacing()
+
+    // Animation Speed
+    let animationLabel = NSTextField(labelWithString: "Animation Speed:")
+    formView.addRow(label: animationLabel, control: animationSpeedPopup)
+    formView.addSectionSpacing()
+
+    // OSD
+    let osdLabel = NSTextField(labelWithString: "On-Screen Display:")
+    showOSDCheckbox.title = "Show for"
+    showOSDInMissionControlCheckbox.title = "Show in Mission Control"
+    
+    let osdContainer = NSStackView()
+    osdContainer.orientation = .horizontal
+    osdContainer.spacing = 8
+    osdContainer.addArrangedSubview(showOSDCheckbox)
+    osdContainer.addArrangedSubview(osdDurationPopup)
+    osdContainer.addArrangedSubview(NSTextField(labelWithString: "when switching spaces"))
+    
+    formView.addRow(label: osdLabel, control: osdContainer)
+    formView.addRow(label: nil, control: showOSDInMissionControlCheckbox)
+    formView.addSectionSpacing()
+
+    // Shortcuts
+    let shortcutsLabel = NSTextField(labelWithString: "Shortcuts:")
+    repeatDirectSpaceHotkeyCheckbox.title =
+      "Pressing the current space's direct shortcut\nreturns to the previous space"
+    formView.addRow(label: shortcutsLabel, control: repeatDirectSpaceHotkeyCheckbox)
   }
 
   private func loadSettings() {
@@ -91,6 +135,24 @@ final class GeneralSettingsViewController: NSViewController {
     }
 
     osdDurationPopup.isEnabled = showOSD
+    overlayDetectionCheckbox.state = defaults.object(forKey: "overlayDetectionEnabled") as? Bool ?? true ? .on : .off
+    let overlayDetectionEnabled = overlayDetectionCheckbox.state == .on
+    showOSDInMissionControlCheckbox.isEnabled = showOSD && overlayDetectionEnabled
+    showOSDInMissionControlCheckbox.state = defaults.bool(forKey: "showOSDInMissionControl") ? .on : .off
+
+    hideMenuBarIconCheckbox.state = defaults.bool(forKey: "hideMenuBarIcon") ? .on : .off
+    swipeOverrideCheckbox.state = defaults.bool(forKey: "swipeOverride") ? .on : .off
+
+    let animationSpeedValue = defaults.double(forKey: "gestureSpeed")
+    if animationSpeedValue > 0 {
+      if let index = animationSpeedValues.firstIndex(where: { $0 == animationSpeedValue }) {
+        animationSpeedPopup.selectItem(at: index)
+      } else {
+        animationSpeedPopup.selectItem(at: 4)
+      }
+    } else {
+      animationSpeedPopup.selectItem(at: 4)
+    }
 
     launchAtLoginCheckbox.state = SMAppService.mainApp.status == .enabled ? .on : .off
   }
@@ -99,6 +161,20 @@ final class GeneralSettingsViewController: NSViewController {
     let isEnabled = sender.state == .on
     defaults.set(isEnabled, forKey: PreferenceKey.showOSD)
     osdDurationPopup.isEnabled = isEnabled
+    let overlayDetectionEnabled = overlayDetectionCheckbox.state == .on
+    showOSDInMissionControlCheckbox.isEnabled = isEnabled && overlayDetectionEnabled
+  }
+
+  @objc private func overlayDetectionChanged(_ sender: NSButton) {
+    let isEnabled = sender.state == .on
+    defaults.set(isEnabled, forKey: "overlayDetectionEnabled")
+    let showOSDEnabled = showOSDCheckbox.state == .on
+    showOSDInMissionControlCheckbox.isEnabled = showOSDEnabled && isEnabled
+    iss_set_overlay_detection_enabled(isEnabled)
+  }
+
+  @objc private func showOSDInMissionControlChanged(_ sender: NSButton) {
+    defaults.set(sender.state == .on, forKey: "showOSDInMissionControl")
   }
 
   @objc private func repeatDirectSpaceHotkeyChanged(_ sender: NSButton) {
@@ -113,6 +189,33 @@ final class GeneralSettingsViewController: NSViewController {
     guard index >= 0 && index < durationPresets.count else { return }
     let duration = durationPresets[index]
     defaults.set(duration, forKey: PreferenceKey.osdDurationMs)
+  }
+
+  @objc private func swipeOverrideChanged(_ sender: NSButton) {
+    let isEnabled = sender.state == .on
+    defaults.set(isEnabled, forKey: "swipeOverride")
+    iss_set_swipe_override(isEnabled)
+  }
+
+  @objc private func animationSpeedChanged(_ sender: NSPopUpButton) {
+    let index = sender.indexOfSelectedItem
+    guard index >= 0 && index < animationSpeedOptions.count else { return }
+
+    var velocity: Double
+    if index < animationSpeedValues.count {
+      velocity = animationSpeedValues[index]
+    } else {
+      velocity = 2000.0
+    }
+
+    defaults.set(velocity, forKey: "gestureSpeed")
+    iss_set_gesture_speed(velocity)
+  }
+
+  @objc private func hideMenuBarIconChanged(_ sender: NSButton) {
+    let hide = sender.state == .on
+    defaults.set(hide, forKey: "hideMenuBarIcon")
+    (NSApp.delegate as? AppDelegate)?.setMenuBarIconVisible(!hide)
   }
 
   @objc private func launchAtLoginChanged(_ sender: NSButton) {

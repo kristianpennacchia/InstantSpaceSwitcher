@@ -71,13 +71,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     menu.addItem(NSMenuItem.separator())
 
     let aboutItem = NSMenuItem(
-      title: "About \(Constants.appName)", action: #selector(openAbout(_:)), keyEquivalent: "")
+      title: "About", action: #selector(openAbout(_:)), keyEquivalent: "")
     aboutItem.target = self
     aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
     menu.addItem(aboutItem)
 
     let quitItem = NSMenuItem(
-      title: "Quit \(Constants.appName)", action: #selector(NSApplication.terminate(_:)),
+      title: "Quit", action: #selector(NSApplication.terminate(_:)),
       keyEquivalent: "q")
     menu.addItem(quitItem)
 
@@ -98,7 +98,14 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
   @objc private func openAbout(_ sender: Any?) {
     NSApp.activate(ignoringOtherApps: true)
-    NSApp.orderFrontStandardAboutPanel(sender)
+
+    var options: [NSApplication.AboutPanelOptionKey: Any] = [:]
+
+    if let gitHash = Bundle.main.object(forInfoDictionaryKey: "GitCommitHash") as? String {
+      options[.version] = "\(gitHash)"
+    }
+
+    NSApp.orderFrontStandardAboutPanel(options: options)
     // Ensure window comes to front if already open
     NSApp.windows.first(where: { $0.title.contains("About") })?.makeKeyAndOrderFront(nil)
   }
@@ -148,15 +155,46 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }
 
     let count = Int(info.spaceCount)
+    let store = HotkeyStore.shared
     for index in 0..<count {
       let title = SpaceLabelFormatter.submenuTitle(for: index, nicknameStore: nicknameStore)
       let item = NSMenuItem(title: title, action: #selector(switchToSpace(_:)), keyEquivalent: "")
+      
+      // Sync customized shortcuts
+      if let identifier = identifierForSpace(index + 1) {
+        let comb = store.combination(for: identifier)
+        item.keyEquivalent = comb.keyEquivalent
+        item.keyEquivalentModifierMask = comb.cocoaModifierFlags
+      }
+
       item.tag = index
       item.target = self
       item.image = SpaceLabelFormatter.symbolImage(
         for: index, pointSize: 13, weight: .regular, nicknameStore: nicknameStore)
       item.state = index == Int(info.currentIndex) ? .on : .off
       submenu.addItem(item)
+    }
+  }
+
+  private func identifierForSpace(_ number: Int) -> HotkeyIdentifier? {
+    switch number {
+    case 1: return .space1
+    case 2: return .space2
+    case 3: return .space3
+    case 4: return .space4
+    case 5: return .space5
+    case 6: return .space6
+    case 7: return .space7
+    case 8: return .space8
+    case 9: return .space9
+    case 10: return .space10
+    case 11: return .space11
+    case 12: return .space12
+    case 13: return .space13
+    case 14: return .space14
+    case 15: return .space15
+    case 16: return .space16
+    default: return nil
     }
   }
 
@@ -205,8 +243,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     }.store(in: &cancellables)
   }
 
+  func setIconVisible(_ visible: Bool) {
+    statusItem.isVisible = visible
+  }
+
   func applyHotkey(_ combination: HotkeyCombination, to identifier: HotkeyIdentifier) {
-    let menuItem = identifier == .left ? leftMenuItem : rightMenuItem
+    let menuItem: NSMenuItem?
+    switch identifier {
+    case .left: menuItem = leftMenuItem
+    case .right: menuItem = rightMenuItem
+    default: return
+    }
     guard let menuItem else { return }
     menuItem.keyEquivalent = combination.keyEquivalent
     menuItem.keyEquivalentModifierMask = combination.cocoaModifierFlags

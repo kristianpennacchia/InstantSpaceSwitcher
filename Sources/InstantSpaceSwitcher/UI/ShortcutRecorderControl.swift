@@ -8,6 +8,13 @@ final class ShortcutRecorderControl: NSView {
     activeRecorder?.isRecording = false
   }
 
+  var isEnabled = true {
+    didSet {
+      needsDisplay = true
+      alphaValue = isEnabled ? 1.0 : 0.5
+    }
+  }
+
   var isRecording = false {
     didSet {
       needsDisplay = true
@@ -20,6 +27,10 @@ final class ShortcutRecorderControl: NSView {
         stopEventTapRecording()
         if Self.activeRecorder === self {
           Self.activeRecorder = nil
+        }
+        // Re-register all hotkeys after recording ends
+        if let appDelegate = NSApp.delegate as? AppDelegate {
+          appDelegate.reregisterAllHotkeys()
         }
       }
     }
@@ -119,6 +130,8 @@ final class ShortcutRecorderControl: NSView {
   }
 
   override func mouseDown(with event: NSEvent) {
+    guard isEnabled else { return }
+    
     // Check accessibility permissions before starting recording
     if !AXIsProcessTrusted() {
       showAccessibilityAlert()

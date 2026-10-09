@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: xcode-27
     
     steps:
       - name: Checkout
@@ -15,12 +15,16 @@ jobs:
 
       - name: Build
         run: |
-          chmod +x build.sh
-          ./build.sh
+          chmod +x dist/build.sh
+          ./dist/build.sh
 
-      - name: Create ZIP
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Create DMG
         run: |
-          ditto -c -k --keepParent InstantSpaceSwitcher.app InstantSpaceSwitcher.zip
+          chmod +x dist/deploy-to-dmg.sh
+          ./dist/deploy-to-dmg.sh
 
       - name: Update "Nightly" Release
         uses: andelf/nightly-release@main
@@ -33,4 +37,4 @@ jobs:
           body: |
             Latest automatic build from the main branch. Might be broken.
           files: |
-            InstantSpaceSwitcher.zip
+            build/InstantSpaceSwitcher-*.dmg

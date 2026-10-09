@@ -119,6 +119,22 @@ final class KeyboardShortcutsViewController: NSViewController {
       .store(in: &cancellables)
     store.$space10Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
       .store(in: &cancellables)
+    store.$space11Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$space12Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$space13Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$space14Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$space15Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$space16Hotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$spaceLastSpaceHotkey.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
+    store.$enabledStates.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts() }
+      .store(in: &cancellables)
     nicknameStore.$entries.receive(on: RunLoop.main).sink { [weak self] _ in self?.loadShortcuts()
     }.store(in: &cancellables)
   }
@@ -131,7 +147,7 @@ final class KeyboardShortcutsViewController: NSViewController {
       return "Switch to space on the right"
     default:
       guard let index = identifier.spaceTargetIndex else {
-        return identifier.rawValue
+        return identifier.displayName
       }
       return SpaceLabelFormatter.keyboardShortcutActionTitle(
         for: index, nicknameStore: nicknameStore)
@@ -169,12 +185,14 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
       let cellView = NSTableCellView()
       let textField = NSTextField(labelWithString: shortcut.name)
       textField.translatesAutoresizingMaskIntoConstraints = false
+      textField.textColor = shortcut.isEnabled ? .labelColor : .disabledControlTextColor
       if let index = shortcut.identifier.spaceTargetIndex,
         let symbolImage = SpaceLabelFormatter.symbolImage(
           for: index, pointSize: 13, weight: .regular, nicknameStore: nicknameStore)
       {
         let imageView = NSImageView(image: symbolImage)
-        imageView.contentTintColor = .secondaryLabelColor
+        imageView.contentTintColor =
+          shortcut.isEnabled ? .secondaryLabelColor : .disabledControlTextColor
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
         let stackView = NSStackView(views: [imageView, textField])
@@ -210,6 +228,7 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
       let recorder = ShortcutRecorderControl(frame: NSRect(x: 0, y: 0, width: 150, height: 22))
       recorder.currentShortcut = shortcut.combination
       recorder.translatesAutoresizingMaskIntoConstraints = false
+      recorder.isEnabled = shortcut.isEnabled
       recorder.onRecordingComplete = { [weak self] combination in
         self?.handleRecordingResult(combination, for: shortcut.identifier)
       }
@@ -225,6 +244,7 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
       resetButton.bezelStyle = .rounded
       resetButton.isBordered = false
       resetButton.tag = row
+      resetButton.isEnabled = shortcut.isEnabled
       resetButton.translatesAutoresizingMaskIntoConstraints = false
       cellView.addSubview(resetButton)
 
@@ -265,6 +285,13 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
     case .space8: defaultCombination = .defaultForSpace(8)
     case .space9: defaultCombination = .defaultForSpace(9)
     case .space10: defaultCombination = .defaultForSpace(10)
+    case .space11: defaultCombination = .defaultForSpace(11)
+    case .space12: defaultCombination = .defaultForSpace(12)
+    case .space13: defaultCombination = .defaultForSpace(13)
+    case .space14: defaultCombination = .defaultForSpace(14)
+    case .space15: defaultCombination = .defaultForSpace(15)
+    case .space16: defaultCombination = .defaultForSpace(16)
+    case .lastSpace: defaultCombination = .defaultLastSpace
     }
     store.update(defaultCombination, for: identifier)
   }
@@ -279,17 +306,22 @@ extension KeyboardShortcutsViewController: NSTableViewDelegate {
 
     let identifier = shortcuts[row].identifier
     store.setEnabled(sender.state == .on, for: identifier)
+    
+    shortcuts[row].isEnabled = sender.state == .on
+    tableView.reloadData(forRowIndexes: IndexSet(integer: row), columnIndexes: IndexSet(integersIn: 0..<tableView.numberOfColumns))
   }
 
   private func handleRecordingResult(
     _ combination: HotkeyCombination, for identifier: HotkeyIdentifier
   ) {
-    let otherIdentifier: HotkeyIdentifier = identifier == .left ? .right : .left
-    if store.combination(for: otherIdentifier) == combination {
+    if let otherIdentifier = HotkeyIdentifier.allCases.first(where: {
+      $0 != identifier && store.combination(for: $0) == combination
+    }) {
       NSSound.beep()
       let alert = NSAlert()
       alert.messageText = "Shortcut already in use"
-      alert.informativeText = "This shortcut is already assigned to another action."
+      alert.informativeText =
+        "This shortcut is already assigned to \(otherIdentifier.displayName)."
       alert.alertStyle = .warning
       alert.addButton(withTitle: "OK")
       alert.runModal()

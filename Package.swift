@@ -29,11 +29,7 @@ let package = Package(
         ),
         .testTarget(
             name: "ISSTests",
-            dependencies: ["ISS"]
-        ),
-        .testTarget(
-            name: "ISSCliIntegrationTests",
-            dependencies: ["ISSCli"]
+            dependencies: ["ISS", "InstantSpaceSwitcher"]
         )
     ]
 )

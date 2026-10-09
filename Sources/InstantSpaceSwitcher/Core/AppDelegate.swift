@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private enum DirectSpaceSwitchSource {
     case hotkey
     case menu
+    case lastSpace
   }
 
   private let menuBarController = MenuBarController()
@@ -20,16 +21,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var currentSpaceIndex: UInt32?
   private var previousSpaceIndex: UInt32?
 
+  func applicationWillFinishLaunching(_ notification: Notification) {
+    NSAppleEventManager.shared().setEventHandler(
+      self,
+      andSelector: #selector(handleReopen),
+      forEventClass: kCoreEventClass,
+      andEventID: kAEReopenApplication
+    )
+  }
+
+  @objc private func handleReopen(_ event: NSAppleEventDescriptor, withReplyEvent replyEvent: NSAppleEventDescriptor) {
+    preferencesWindowController.present()
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
     ensureAccessibilityPermission()
 
     if !iss_init() {
       print("Failed to initialize ISS event tap")
+      retryIssInit()
+    }
+
+    if UserDefaults.standard.bool(forKey: "swipeOverride") {
+      iss_set_swipe_override(true)
+    }
+
+    let gestureSpeed = UserDefaults.standard.double(forKey: "gestureSpeed")
+    if gestureSpeed > 0 {
+      iss_set_gesture_speed(gestureSpeed)
+    }
+
+    if UserDefaults.standard.object(forKey: "overlayDetectionEnabled") as? Bool ?? true {
+      iss_set_overlay_detection_enabled(true)
+    }
+
+    iss_set_switch_callback { newSpaceIndex in
+      Task { @MainActor in
+        (NSApp.delegate as? AppDelegate)?.handleSpaceSwitch(to: newSpaceIndex)
+      }
     }
 
     setupMainMenu()
     menuBarController.delegate = self
     menuBarController.setup()
+
+    if UserDefaults.standard.bool(forKey: "hideMenuBarIcon") {
+      menuBarController.setIconVisible(false)
+    }
+
     bindHotkeys()
     observeSpaceChanges()
     observeAppActivation()
@@ -42,7 +81,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     stopObservingAppActivation()
   }
 
+  private func retryIssInit() {
+    guard !iss_init() else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+      self?.retryIssInit()
+    }
+  }
+
   private func ensureAccessibilityPermission() {
+    guard !AXIsProcessTrusted() else { return }
+
+    if let bundleId = Bundle.main.bundleIdentifier {
+      let task = Process()
+      task.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+      task.arguments = ["reset", "Accessibility", bundleId]
+      try? task.run()
+      task.waitUntilExit()
+    }
+
     let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
     let options = [promptKey: true] as CFDictionary
     _ = AXIsProcessTrustedWithOptions(options)
@@ -59,7 +115,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appMenuItem.submenu = appMenu
 
     let aboutItem = NSMenuItem(
-      title: "About \(Constants.appName)", action: #selector(openAbout(_:)), keyEquivalent: "")
+      title: "About", action: #selector(openAbout(_:)), keyEquivalent: "")
     aboutItem.target = self
     aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
     appMenu.addItem(aboutItem)
@@ -104,7 +160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     appMenu.addItem(NSMenuItem.separator())
 
     let quitItem = NSMenuItem(
-      title: "Quit \(Constants.appName)", action: #selector(NSApplication.terminate(_:)),
+      title: "Quit", action: #selector(NSApplication.terminate(_:)),
       keyEquivalent: "q")
     quitItem.target = NSApp
     appMenu.addItem(quitItem)
@@ -215,6 +271,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     hotkeyStore.$space10Hotkey.receive(on: RunLoop.main).sink { [weak self] in
       self?.registerHotkey(for: .space10, combination: $0)
     }.store(in: &cancellables)
+    hotkeyStore.$space11Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space11, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$space12Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space12, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$space13Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space13, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$space14Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space14, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$space15Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space15, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$space16Hotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .space16, combination: $0)
+    }.store(in: &cancellables)
+    hotkeyStore.$spaceLastSpaceHotkey.receive(on: RunLoop.main).sink { [weak self] in
+      self?.registerHotkey(for: .lastSpace, combination: $0)
+    }.store(in: &cancellables)
 
     hotkeyStore.$enabledStates.receive(on: RunLoop.main).sink { [weak self] _ in
       guard let self = self else { return }
@@ -223,6 +300,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           for: identifier, combination: self.hotkeyStore.combination(for: identifier))
       }
     }.store(in: &cancellables)
+  }
+
+  func setMenuBarIconVisible(_ visible: Bool) {
+    menuBarController.setIconVisible(visible)
+  }
+
+  func reregisterAllHotkeys() {
+    for identifier in HotkeyIdentifier.allCases {
+      let combination = hotkeyStore.combination(for: identifier)
+      menuBarController.applyHotkey(combination, to: identifier)
+      registerHotkey(for: identifier, combination: combination)
+    }
   }
 
   private func registerHotkey(for identifier: HotkeyIdentifier, combination: HotkeyCombination) {
@@ -260,45 +349,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.performSpaceSwitchToIndex(8, source: .hotkey)
       case .space10:
         self.performSpaceSwitchToIndex(9, source: .hotkey)
+      case .space11:
+        self.performSpaceSwitchToIndex(10, source: .hotkey)
+      case .space12:
+        self.performSpaceSwitchToIndex(11, source: .hotkey)
+      case .space13:
+        self.performSpaceSwitchToIndex(12, source: .hotkey)
+      case .space14:
+        self.performSpaceSwitchToIndex(13, source: .hotkey)
+      case .space15:
+        self.performSpaceSwitchToIndex(14, source: .hotkey)
+      case .space16:
+        self.performSpaceSwitchToIndex(15, source: .hotkey)
+      case .lastSpace:
+        self.performSpaceLastSpace()
       }
     }
   }
 
   private func performSpaceSwitch(_ direction: ISSDirection) {
-    // Get current space info for cursor display BEFORE switch to calculate target
-    var info = ISSSpaceInfo()
-    let hasInfo = iss_get_space_info(&info)
-
-    // Calculate target before attempting switch
-    var targetIndex: UInt32 = 0
-    if hasInfo {
-      updateTrackedSpaceIndices(withCurrentIndex: info.currentIndex)
-      if direction == ISSDirectionLeft {
-        targetIndex = info.currentIndex > 0 ? info.currentIndex - 1 : info.currentIndex
-      } else {
-        targetIndex =
-          info.currentIndex + 1 < info.spaceCount ? info.currentIndex + 1 : info.currentIndex
-      }
-    }
-
+    // ISS reports the (prediction-aware) target via the switch callback, which updates the
+    // tracked indices and shows the OSD.
     if !iss_switch(direction) {
       NSSound.beep()
       return
     }
-
-    // Update menubar space info only on successful switch
-    if hasInfo {
-      updateTrackedSpaceIndices(withCurrentIndex: targetIndex)
-    }
     refreshSpaceInfo()
-
-    // Show OSD for the target slot only on successful switch.
-    if hasInfo {
-      OSDWindow.shared.show(
-        message: SpaceLabelFormatter.runtimeLabel(
-          for: Int(targetIndex), nicknameStore: nicknameStore),
-        symbolName: nicknameStore.symbolName(for: Int(targetIndex)))
-    }
   }
 
   private func performSpaceSwitchToIndex(_ requestedIndex: UInt32, source: DirectSpaceSwitchSource) {
@@ -316,15 +392,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       NSSound.beep()
       return
     }
-
-    // Update menubar space info
-    updateTrackedSpaceIndices(withCurrentIndex: targetIndex)
     refreshSpaceInfo()
+  }
 
-    // Show OSD for the target slot.
+  private func performSpaceLastSpace() {
+    guard let previousSpaceIndex, previousSpaceIndex != currentSpaceIndex else {
+      NSSound.beep()
+      return
+    }
+
+    performSpaceSwitchToIndex(previousSpaceIndex, source: .lastSpace)
+  }
+
+  /// Called (via the ISS switch callback) after every successful switch, including trackpad
+  /// swipe overrides.
+  fileprivate func handleSpaceSwitch(to newSpaceIndex: UInt32) {
+    updateTrackedSpaceIndices(withCurrentIndex: newSpaceIndex)
     OSDWindow.shared.show(
-      message: SpaceLabelFormatter.runtimeLabel(for: Int(targetIndex), nicknameStore: nicknameStore),
-      symbolName: nicknameStore.symbolName(for: Int(targetIndex)))
+      message: SpaceLabelFormatter.runtimeLabel(
+        for: Int(newSpaceIndex), nicknameStore: nicknameStore),
+      symbolName: nicknameStore.symbolName(for: Int(newSpaceIndex)))
   }
 
   private func refreshSpaceInfo() {
@@ -379,9 +466,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      guard let self else { return }
-      self.refreshSpaceInfo()
-      self.menuBarController.scheduleRefresh(after: 0.2)
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        self.refreshSpaceInfo()
+        iss_reset_predictions()
+        self.menuBarController.scheduleRefresh(after: 0.2)
+      }
     }
   }
 
@@ -399,7 +489,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      self?.menuBarController.scheduleRefresh(after: 0.1)
+      Task { @MainActor [weak self] in
+        self?.menuBarController.scheduleRefresh(after: 0.1)
+      }
     }
   }
 
@@ -409,6 +501,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       appActivationObserver = nil
     }
   }
+
 }
 
 extension AppDelegate: MenuBarControllerDelegate {

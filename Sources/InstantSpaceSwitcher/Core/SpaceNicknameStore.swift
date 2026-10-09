@@ -209,7 +209,13 @@ extension HotkeyIdentifier {
     case .space8: return 7
     case .space9: return 8
     case .space10: return 9
-    case .left, .right: return nil
+    case .space11: return 10
+    case .space12: return 11
+    case .space13: return 12
+    case .space14: return 13
+    case .space15: return 14
+    case .space16: return 15
+    case .left, .right, .lastSpace: return nil
     }
   }
 }
